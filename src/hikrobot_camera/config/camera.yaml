@@ -3,3 +3,8 @@
 /hikrobot_camera:
   ros__parameters:
     use_sim_time: false
+    exposure_time: 200000.0
+    gain: 0.0
+    pixel_format: "BayerRG8"
+    image_topic: "image_raw"
+    camera_serial: "DB1921834" 

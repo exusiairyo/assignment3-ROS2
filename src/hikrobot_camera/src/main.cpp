@@ -1,5 +1,5 @@
 #include <memory>
-
+#include <MvCameraControl.h>
 #include "hikrobot_camera/camera_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 

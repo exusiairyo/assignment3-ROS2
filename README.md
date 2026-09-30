@@ -1,103 +1,228 @@
-# RoboMaster assignment3 ROS2
-这份仓库提供一个基础工程，供你在 Ubuntu 22.04 / ROS 2 Humble 上，基于海康机器人 MVS SDK 完成相机功能包。
+# 基于海康 MVS SDK 的 ROS 2 相机驱动
 
-目前只有最小节点和启动配置，连接相机、发布图像、参数设置及断线重连需要你完成。目录划分仅供参考，你可以根据需要调整。
+> **一句话说明**：一个把海康（Hikrobot）USB3 Vision 工业相机接入 ROS 2 的 `hikrobot_camera` 功能包，实现设备发现、图像发布、参数控制与断线重连。
 
-## 开始
-
-1. 点击 GitHub 页面右上角的 **Fork**，将仓库复制到你的账号下。
-2. 在你的 Fork 页面点击 **Code**，复制地址并克隆到本地：
-
-   ```bash
-   # 将下面的地址替换为你的 Fork 地址
-   git clone <你的 Fork 地址>
-   cd robomaster-camera-assignment
-   ```
-
-3. 阅读 [ROS 2 教程](docs/ROS2Tutorial.md) 和 [作业要求](docs/assignment.md)，按下面的步骤构建并启动工程。
-4. 在自己的仓库中完成开发，提交并推送改动，最后提交你的 GitHub 仓库链接。
-
-[AGENTS.md](AGENTS.md) 用于约束 AI 助手的帮助范围：你可以用 AI 理解概念和分析问题，核心实现需要自己完成。
-
-## 仓库结构
-
-```text
-robomaster-camera-assignment/          # 同时作为 colcon 工作空间
-├── AGENTS.md                         # AI 助教规范
-├── README.md
-├── docs/ROS2Tutorial.md              # ROS 2 教程
-├── docs/assignment.md                # 作业要求
-└── src/hikrobot_camera/              # ROS 2 功能包
-    ├── package.xml                   # 包信息与依赖
-    ├── CMakeLists.txt                # 构建与安装配置
-    ├── include/hikrobot_camera/
-    │   └── camera_node.hpp          # 节点声明
-    ├── src/
-    │   ├── main.cpp                 # 程序入口
-    │   └── camera_node.cpp          # 在这里开始实现
-    ├── launch/camera.launch.py       # 启动文件
-    ├── config/camera.yaml           # 参数配置
-    ├── cmake/                       # 可按需添加 SDK 查找模块
-    └── test/                        # 可按需添加测试
-```
-
-## 环境与依赖
-
-先安装 ROS 2 Humble 与开发工具，确保 `ros2`、`colcon` 和 `rosdep` 可用。
-
-工程目前没有接入 MVS SDK。你需要从 [海康机器人下载中心](https://www.hikrobotics.com/cn/machinevision/service/download/?module=0) 下载适合系统架构的 SDK，阅读随附文档，并完成构建集成。ROS 和系统依赖可以通过 rosdep 安装，厂商 SDK 需要单独配置。
-
-## 编译
-
-在新终端中进入仓库根目录，运行：
-
-```bash
-source /opt/ros/humble/setup.bash
-# 仅当系统尚未初始化 rosdep 时执行一次：sudo rosdep init
-rosdep update
-rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
-colcon build --symlink-install --packages-select hikrobot_camera
-```
-
-本仓库本身就是工作空间，不需要再放到另一个工作空间的 `src` 中。如果你想使用已有工作空间，也可以只把 `src/hikrobot_camera` 放进去。
-
-## 运行
-
-另开终端，在仓库根目录运行：
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-ros2 launch hikrobot_camera camera.launch.py
-```
-
-如果你使用 Zsh，将环境脚本的 `.bash` 换为 `.zsh`。
-
-初始工程会输出 `Training scaffold only` 并保持运行，按 Ctrl+C 退出。此时尚未实现相机功能，没有图像话题是正常的。
-
-你也可以指定自己的参数文件：
-
-```bash
-ros2 launch hikrobot_camera camera.launch.py params_file:=/absolute/path/to/camera.yaml
-```
-
-当前 YAML 只配置了 `use_sim_time`。相机相关参数需要你在代码中声明并实现后，再加入配置文件。
-
-## 完成与提交
-
-从 `camera_node.cpp` 的 TODO 开始，按 [作业要求](docs/assignment.md) 完成相机功能。你可以增加源文件或 SDK 封装类，并相应更新构建配置。
-
-完成后：
-
-- 更新 README，说明 SDK 及依赖的安装方式、如何编译启动、有哪些可配置参数。如果有未完成的功能或已知问题，简单注明即可。
-- 将源代码、Launch 和参数配置推送到你的 Fork, 然后提交仓库链接到 2719850558@qq.com，格式为：第三次作业-班级-姓名（第三次作业-自动化2305-周湛昊）
-
+| 项目 | 内容 |
+|---|---|
+| 功能包名 | `hikrobot_camera` |
+| 目标相机 | Hikrobot MV-CS016-10UC（USB3 Vision） |
+| 核心依赖 | 海康 MVS SDK（`/opt/MVS`）、ROS 2 |
+| 图像话题 | `/image_raw`（`sensor_msgs/Image`，`bayer_rggb8`） |
+| 参数节点名 | `/hikrobot_camera` |
 
 ---
 
-## 在这里解释你的项目
+## 目录
 
-例如：
+- [1. 环境说明 ⚠️](#1-环境说明-️)
+- [2. 依赖安装](#2-依赖安装)
+  - [2.1 MVS SDK](#21-mvs-sdk)
+  - [2.2 usbfs_memory_mb ⭐](#22-usbfs_memory_mb-)
+  - [2.3 ROS 依赖](#23-ros-依赖)
+- [3. 编译](#3-编译)
+- [4. 运行](#4-运行)
+- [5. 可配置参数 ⭐](#5-可配置参数-)
+  - [5.1 参数文件](#51-参数文件)
+  - [5.2 运行时改参数](#52-运行时改参数)
+- [6. 功能说明](#6-功能说明)
+- [7. 已知问题 / 未完成](#7-已知问题--未完成)
+- [8. 参考文献](#8-参考文献)
 
-1. 如何编译：
-2. 运行方式：
+---
+
+## 1. 环境说明 ⚠️
+
+| 项目 | 版本 |
+|---|---|
+| 作业要求 | Ubuntu 22.04 + ROS 2 Humble |
+| 本机实测 | Ubuntu 24.04 + ROS 2 Jazzy |
+
+**差异影响：**
+
+- 命令中的 `humble` 需替换为 `jazzy`。
+- **环境变量加载**：Humble 通常用 `source /opt/ros/humble/setup.bash`；本机使用 `source /opt/ros/jazzy/setup.zsh`（根据实际 shell 选择 `setup.bash` 或 `setup.zsh`）。
+- ⚠️ 若助教按 Humble 命令运行，请先确认 ROS 发行版（`ls /opt/ros`）并对应替换。
+
+```bash
+# 确认本机 ROS 发行版
+ls /opt/ros
+```
+
+---
+
+## 2. 依赖安装
+
+### 2.1 MVS SDK
+
+| 项目 | 内容 |
+|---|---|
+| 下载来源 | 海康机器人官网 |
+| 安装版本 | 4.8.2.x |
+| 安装路径 | `/opt/MVS` |
+| udev 规则 | `80-drivers-SDK-2bdf.rules`，其中 `2bdf` 为海康厂商 ID |
+
+> 说明：udev 规则用于让普通用户免 `sudo` 访问相机设备节点。
+
+### 2.2 usbfs_memory_mb ⭐
+
+Linux 默认 `usbfs_memory_mb` 为 **16 MB**，USB3 Vision 相机会出现**丢帧或开流失败**。需设置为 **2000 MB**，且重启后失效（内核参数，非持久化）。
+
+通过 systemd 服务设置，写入 `/etc/systemd/system/usbfs_memory.service`：
+
+```ini
+# /etc/systemd/system/usbfs_memory.service
+[Unit]
+Description=Set usbfs_memory_mb
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo 2000 > /sys/module/usbcore/parameters/usbfs_memory_mb'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启用并启动：
+
+```bash
+sudo systemctl enable usbfs_memory.service
+sudo systemctl start usbfs_memory.service
+```
+
+验证：
+
+```bash
+cat /sys/module/usbcore/parameters/usbfs_memory_mb
+# 应输出 2000
+```
+
+### 2.3 ROS 依赖
+
+```bash
+rosdep install --from-paths src --ignore-src -r -y --rosdistro jazzy
+```
+
+> ⚠️ 指定 `--rosdistro jazzy`，避免默认按当前 distro 解析导致依赖不匹配。
+
+---
+
+## 3. 编译
+
+```bash
+cd ~/assignment3-ROS2  # 工作空间根目录（本仓库）
+source /opt/ros/jazzy/setup.zsh
+colcon build --symlink-install --packages-select hikrobot_camera
+```
+
+**注意事项：**
+
+- 需要**先 source ROS 2 环境**（Jazzy 对应 `setup.zsh` 或 `setup.bash`）。
+- MVS 库**不在系统缓存中**（`/opt/MVS/lib/64`），通过 `target_*` 系列命令让链接器找到：
+
+  ```cmake
+  target_include_directories(camera_node PRIVATE include /opt/MVS/include)
+  target_link_directories(camera_node PRIVATE /opt/MVS/lib/64)
+  target_link_libraries(camera_node MvCameraControl)
+  ```
+
+- 使用 `target_*` 而非 `link_directories`：作用域限定在 `camera_node` 目标，避免污染其他目标。
+
+---
+
+## 4. 运行
+
+```bash
+cd ~/assignment3-ROS2
+source install/setup.zsh
+ros2 launch hikrobot_camera camera.launch.py
+```
+
+带参数文件启动：
+
+```bash
+ros2 launch hikrobot_camera camera.launch.py \
+    params_file:=$(ros2 pkg prefix hikrobot_camera)/share/hikrobot_camera/config/camera.yaml
+```
+
+查看图像：
+
+```bash
+rviz2
+# 或
+rqt_image_view
+```
+
+话题：`/image_raw`
+
+---
+
+## 5. 可配置参数 ⭐
+
+| 参数 | 类型 | 单位 | 范围 | 说明 |
+|---|---|---|---|---|
+| `exposure_time` | `double` | µs | 15 ~ 9996427 | 曝光时间。**范围从相机读出，非猜测。** |
+| `gain` | `double` | dB | 0 ~ 15 | 增益。**范围从相机读出，非猜测。** |
+| `pixel_format` | `string` | — | `BayerRG8`（仅支持此格式） | 像素格式。 |
+| `image_topic` | `string` | — | — | 图像话题名。 |
+| `camera_serial` | `string` | — | — | 目标相机序列号。 |
+| `frame_rate` | `double` | — | — | ⚠️ **见下方说明。** |
+
+**关于 `frame_rate`：**
+
+本相机（MV-CS016-10UC）无 `AcquisitionFrameRate` 节点，**不支持直接设置帧率**。实际帧率由曝光时间决定（帧率 ≈ 1/曝光时间）。设置该参数会返回失败并说明原因。
+
+### 5.1 参数文件
+
+`config/camera.yaml`：
+
+```yaml
+/hikrobot_camera:
+  ros__parameters:
+    use_sim_time: false
+    exposure_time: 200000.0
+    gain: 0.0
+    pixel_format: "BayerRG8"
+    image_topic: "image_raw"
+    camera_serial: "DB1921834"
+```
+
+launch 时加载：
+
+```bash
+ros2 launch hikrobot_camera camera.launch.py \
+    params_file:=$(ros2 pkg prefix hikrobot_camera)/share/hikrobot_camera/config/camera.yaml
+```
+
+### 5.2 运行时改参数
+
+```bash
+ros2 param set /hikrobot_camera exposure_time 8000.0
+ros2 param set /hikrobot_camera gain 5.0
+```
+
+> ⚠️ **运行时参数不持久化**：`ros2 param set` 修改的值仅在当前进程内生效，重启节点后恢复为 `config/camera.yaml` 中的值。
+
+---
+
+## 6. 功能说明
+
+| 作业要求 | 实现 |
+|---|---|
+| 设备发现与选择 | 枚举设备 + 按序列号选择 |
+| 图像发布 | `sensor_msgs/Image`，`bayer_rggb8` 编码 |
+| 参数读写 | 声明 + 范围校验 + 运行时动态生效 |
+| 断线重连 | 异常回调触发 → 重新枚举 → 按序列号重连 → 恢复配置 |
+
+---
+
+## 7. 已知问题 / 未完成
+
+- **`frame_rate` 参数不支持**（原因见第 5 节）。
+- **时间戳使用 ROS 的 `now()`**，不是设备硬件时间戳。
+- **`handle_` 在多线程下的访问没有加锁**（重连回调与主线程并发）。
+
+## 8. 参考文献
+
+- MVS SDK 文档路径：`/opt/MVS/doc/`
+- 用到的范例：`GrabImage.cpp`、`ReconnectDemo.cpp`
